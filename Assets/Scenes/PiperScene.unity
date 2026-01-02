@@ -595,7 +595,6 @@ GameObject:
   - component: {fileID: 1058211986}
   - component: {fileID: 1058211985}
   - component: {fileID: 1058211988}
-  - component: {fileID: 1058211987}
   - component: {fileID: 1058211989}
   - component: {fileID: 1058211990}
   m_Layer: 0
@@ -717,19 +716,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1058211987
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1058211983}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1f7a3d2d14e554c2792464d4165f92dd, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  jsonFile: {fileID: 4900000, guid: 197f6f55d5fc72747bfd27f3d6697a0f, type: 3}
 --- !u!114 &1058211988
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -742,11 +728,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5bd68a7f73b184ad9a8dfb22592a7d44, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  modelFileName: en_GB-southern_english_female-low.onnx
-  tokenizer: {fileID: 1058211987}
-  phonemizerModelName: model.onnx
-  phonemizerConfigName: tokenizer.json
-  phonemizerDictName: phoneme_dict.json
+  modelFileName: Piper/en_GB-southern_english_female-low.onnx
+  piperConfigName: Piper/en_GB-southern_english_female-low.onnx.json
+  phonemizerModelName: OpenPhonemizer/model.onnx
+  phonemizerConfigName: OpenPhonemizer/tokenizer.json
+  phonemizerDictName: OpenPhonemizer/phoneme_dict.json
   voiceNameText: {fileID: 1166640658}
   commaDelay: 0.1
   periodDelay: 0.4

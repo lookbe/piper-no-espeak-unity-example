@@ -1,5 +1,7 @@
 using System;
 using System.Linq;
+using System.Text;
+using System.Runtime.InteropServices;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -7,16 +9,18 @@ using System.IO;
 using System.Collections;
 using System.Text.RegularExpressions;
 using UnityEngine.Networking;
+using System.IO.Compression;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using OpenPhonemizer; 
+using Newtonsoft.Json;
 
 [RequireComponent(typeof(AudioSource))]
 public class PiperManager : MonoBehaviour
 {
     [Header("Piper Model Settings")]
     public string modelFileName = "model.onnx";
-    public ESpeakTokenizer tokenizer; // Maps phonemes to IDs for Piper
+    public string piperConfigName = "model.json";
 
     [Header("OpenPhonemizer Settings")]
     public string phonemizerModelName = "phonemizer_model.onnx";
@@ -32,6 +36,10 @@ public class PiperManager : MonoBehaviour
 
     private bool hasSidKey = false;
     private int speakerId = 0;
+
+    // Piper Config Data
+    private PiperConfig piperConfig;
+    private float[] inferenceParams;
 
 
     [Range(0.0f, 1.0f)] public float commaDelay = 0.1f;
@@ -55,8 +63,9 @@ public class PiperManager : MonoBehaviour
         string persistentDataPath = Application.persistentDataPath;
         string streamingAssetsPath = Application.streamingAssetsPath;
 
-        // Paths for Piper Model
+        // Paths for Piper Model & Config
         string piperModelPathId = Path.Combine(persistentDataPath, modelFileName);
+        string piperConfigPathId = Path.Combine(persistentDataPath, piperConfigName);
         
         // Paths for Phonemizer
         string phModelPath = Path.Combine(persistentDataPath, phonemizerModelName);
@@ -66,12 +75,14 @@ public class PiperManager : MonoBehaviour
         #if UNITY_ANDROID && !UNITY_EDITOR
             // Android: Copy all required files from StreamingAssets to persistentDataPath
             yield return StartCoroutine(CopyFile(modelFileName, piperModelPathId));
+            yield return StartCoroutine(CopyFile(piperConfigName, piperConfigPathId));
             yield return StartCoroutine(CopyFile(phonemizerModelName, phModelPath));
             yield return StartCoroutine(CopyFile(phonemizerConfigName, phConfigPath));
             yield return StartCoroutine(CopyFile(phonemizerDictName, phDictPath));
         #else
             // Editor: Use StreamingAssets directly
             piperModelPathId = Path.Combine(streamingAssetsPath, modelFileName);
+            piperConfigPathId = Path.Combine(streamingAssetsPath, piperConfigName);
             phModelPath = Path.Combine(streamingAssetsPath, phonemizerModelName);
             phConfigPath = Path.Combine(streamingAssetsPath, phonemizerConfigName);
             phDictPath = Path.Combine(streamingAssetsPath, phonemizerDictName);
@@ -91,7 +102,40 @@ public class PiperManager : MonoBehaviour
             yield break;
         }
 
-        // 2. Initialize Piper Model
+        // 2. Load Piper Configuration
+        try
+        {
+             if (!File.Exists(piperConfigPathId))
+             {
+                 Debug.LogError($"Piper config not found at {piperConfigPathId}");
+                 yield break;
+             }
+
+             string configJson = File.ReadAllText(piperConfigPathId);
+             piperConfig = JsonConvert.DeserializeObject<PiperConfig>(configJson);
+             
+             if (piperConfig == null)
+             {
+                 Debug.LogError("Failed to deserialize Piper config.");
+                 yield break;
+             }
+             
+             inferenceParams = new float[3]
+             {
+                piperConfig.inference.noise_scale,
+                piperConfig.inference.length_scale,
+                piperConfig.inference.noise_w
+             };
+
+             Debug.Log($"Loaded Piper Config. Sample Rate: {piperConfig.audio.sample_rate}");
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"Failed to load Piper config: {e.Message}");
+            yield break;
+        }
+
+        // 3. Initialize Piper Model
         try
         {
             Debug.Log($"Creating InferenceSession for Piper with model at: {piperModelPathId}");
@@ -245,11 +289,11 @@ public class PiperManager : MonoBehaviour
         // e.g. "h@loU" -> ["h", "@", "l", "o", "U"]
         string[] phonemeArray = phonemeStr.ToCharArray().Select(c => c.ToString()).ToArray();
         
-        // Piper onnx models typically expect Int64 (long) inputs
-        int[] phonemeTokensInt = tokenizer.Tokenize(phonemeArray);
+        // Use internal tokenizer logic
+        int[] phonemeTokensInt = Tokenize(phonemeArray);
         long[] phonemeTokens = phonemeTokensInt.Select(x => (long)x).ToArray();
 
-        float[] scales = tokenizer.GetInferenceParams();
+        float[] scales = inferenceParams;
         long[] inputLength = { phonemeTokens.Length };
 
         Debug.Log($"Model inputs prepared. Token count: {inputLength[0]}, Scales: [{string.Join(", ", scales)}]");
@@ -297,7 +341,7 @@ public class PiperManager : MonoBehaviour
                 }
                 Debug.Log($"Generated audio data length: {audioData.Length}");
 
-                int sampleRate = tokenizer.SampleRate;
+                int sampleRate = piperConfig.audio.sample_rate;
                 
                 AudioClip clip = AudioClip.Create("GeneratedSpeech", audioData.Length, 1, sampleRate, false);
                 clip.SetData(audioData, 0);
@@ -325,10 +369,10 @@ public class PiperManager : MonoBehaviour
         }
 
         string[] phonemeArray = phonemeStr.ToCharArray().Select(c => c.ToString()).ToArray();
-        int[] phonemeTokensInt = tokenizer.Tokenize(phonemeArray);
+        int[] phonemeTokensInt = Tokenize(phonemeArray);
         long[] phonemeTokens = phonemeTokensInt.Select(x => (long)x).ToArray();
         
-        float[] scales = tokenizer.GetInferenceParams();
+        float[] scales = inferenceParams;
         long[] inputLength = { phonemeTokens.Length };
 
         try
@@ -378,5 +422,73 @@ public class PiperManager : MonoBehaviour
             Debug.LogError($"Phonemization failed: {e.Message}");
             return null;
         }
+    }
+
+    // --- Tokenizer Logic ---
+
+    public int[] Tokenize(string[] phonemes)
+    {
+        if (piperConfig == null)
+        {
+            Debug.LogError("Piper Config is not initialized.");
+            return new int[0];
+        }
+
+        int estimatedCapacity = (phonemes != null ? phonemes.Length * 2 : 0) + 3;
+        var tokenizedList = new List<int>(estimatedCapacity) { 1, 0 }; // Start tokens? check piper defaults. usually 1 (BOS)
+
+        if (phonemes != null && phonemes.Length > 0)
+        {
+            foreach (string phoneme in phonemes)
+            {
+                if (piperConfig.PhonemeIdMap.TryGetValue(phoneme, out int[] ids) && ids.Length > 0)
+                {
+                    tokenizedList.Add(ids[0]);
+                    tokenizedList.Add(0); // Separator? Piper uses 0 as standard separator?
+                }
+                else
+                {
+                    Debug.LogWarning($"Token not found for phoneme: '{phoneme}'. It will be skipped.");
+                }
+            }
+        }
+
+        tokenizedList.Add(2); // End token?
+
+        return tokenizedList.ToArray();
+    }
+    
+    // Internal Config Classes
+    [Serializable]
+    public class AudioConfig
+    {
+        public int sample_rate { get; set; }
+        public string quality { get; set; }
+    }
+
+    [Serializable]
+    public class ESpeakConfig
+    {
+        public string voice { get; set; }
+    }
+
+    [Serializable]
+    public class InferenceConfig
+    {
+        public float noise_scale { get; set; }
+        public float length_scale { get; set; }
+        public float noise_w { get; set; }
+    }
+
+    [Serializable]
+    public class PiperConfig
+    {
+        public AudioConfig audio { get; set; }
+        public ESpeakConfig espeak { get; set; }
+        public InferenceConfig inference { get; set; }
+        public string phoneme_type { get; set; }
+
+        [JsonProperty("phoneme_id_map")]
+        public Dictionary<string, int[]> PhonemeIdMap { get; set; }
     }
 }
