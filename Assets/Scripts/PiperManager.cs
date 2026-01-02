@@ -9,6 +9,8 @@ using UnityEngine.UI;
 using System.IO;
 using System.Collections;
 using System.Text.RegularExpressions;
+using UnityEngine.Networking;
+using System.IO.Compression;
 
 [RequireComponent(typeof(AudioSource))]
 public class PiperManager : MonoBehaviour
