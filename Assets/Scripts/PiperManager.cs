@@ -4,27 +4,29 @@ using System.Text;
 using System.Runtime.InteropServices;
 using System.Collections.Generic;
 using UnityEngine;
-using Unity.InferenceEngine;
 using UnityEngine.UI;
 using System.IO;
 using System.Collections;
 using System.Text.RegularExpressions;
 using UnityEngine.Networking;
 using System.IO.Compression;
+using Microsoft.ML.OnnxRuntime;
+using Microsoft.ML.OnnxRuntime.Tensors;
 
 [RequireComponent(typeof(AudioSource))]
 public class PiperManager : MonoBehaviour
 {
-    public ModelAsset modelAsset;
+    public string modelFileName = "model.onnx";
     public ESpeakTokenizer tokenizer;
 
     public Text voiceNameText;
 
-    private Worker engine;
+    private InferenceSession session;
     private AudioSource audioSource;
     private bool isInitialized = false;
 
     private bool hasSidKey = false;
+    private int speakerId = 0;
 
 
     [Range(0.0f, 1.0f)] public float commaDelay = 0.1f;
@@ -46,10 +48,13 @@ public class PiperManager : MonoBehaviour
     private IEnumerator InitializePiper()
     {
         string espeakDataPath;
+        string modelPath;
 
         #if UNITY_ANDROID && !UNITY_EDITOR
             espeakDataPath = Path.Combine(Application.persistentDataPath, "espeak-ng-data");
+            modelPath = Path.Combine(Application.persistentDataPath, modelFileName);
 
+            // 1. Setup eSpeak Data (copy if needed)
             if (!Directory.Exists(espeakDataPath))
             {
                 Debug.Log("Android: eSpeak data not found in persistentDataPath. Starting copy process...");
@@ -92,23 +97,55 @@ public class PiperManager : MonoBehaviour
             {
                 Debug.Log("Android: eSpeak data already exists in persistentDataPath.");
             }
+
+            // 2. Setup Model File (copy if needed)
+            if (!File.Exists(modelPath))
+            {
+                Debug.Log($"Android: Model file '{modelFileName}' not found in persistentDataPath. Copying from StreamingAssets...");
+                string modelSourcePath = Path.Combine(Application.streamingAssetsPath, modelFileName);
+                
+                using (UnityWebRequest www = UnityWebRequest.Get(modelSourcePath))
+                {
+                    yield return www.SendWebRequest();
+                    if (www.result != UnityWebRequest.Result.Success)
+                    {
+                         Debug.LogError($"Failed to load model file '{modelFileName}' from StreamingAssets: {www.error}");
+                         yield break;
+                    }
+                    File.WriteAllBytes(modelPath, www.downloadHandler.data);
+                    Debug.Log($"Model file copied to: {modelPath}");
+                }
+            }
+
         #else
             espeakDataPath = Path.Combine(Application.streamingAssetsPath, "espeak-ng-data");
+            modelPath = Path.Combine(Application.streamingAssetsPath, modelFileName);
             Debug.Log($"Editor/Standalone: Using eSpeak data directly from StreamingAssets: {espeakDataPath}");
             yield return null;
         #endif
 
         InitializeESpeak(espeakDataPath);
 
-        var model = ModelLoader.Load(modelAsset);
-        engine = new Worker(model, BackendType.CPU);
-
-        if (model.inputs.Count == 4 && model.inputs[3].name == "sid")
+        try
         {
-            hasSidKey = true;
+            Debug.Log($"Creating InferenceSession with model at: {modelPath}");
+            session = new InferenceSession(modelPath);
+            
+            // Auto-detect if "sid" input exists
+            if (session.InputMetadata.ContainsKey("sid"))
+            {
+                hasSidKey = true;
+                Debug.Log("Model requires speaker ID (sid).");
+            }
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"Failed to perform inference session initialization: {e.Message}");
+            yield break;
         }
 
-        voiceNameText.text = $"Model: {modelAsset.name}";
+        if (voiceNameText != null)
+             voiceNameText.text = $"Model: {modelFileName}";
 
         Debug.Log("Piper Manager initialized.");
         isInitialized = true;
@@ -147,7 +184,8 @@ public class PiperManager : MonoBehaviour
 
     void OnDestroy()
     {
-        engine?.Dispose();
+        session?.Dispose();
+        session = null;
     }
 
     public void OnSubmitText(Text textField)
@@ -238,49 +276,80 @@ public class PiperManager : MonoBehaviour
         }
 
         string[] phonemeArray = phonemeStr.Trim().Select(c => c.ToString()).ToArray();
-        int[] phonemeTokens = tokenizer.Tokenize(phonemeArray);
+        // Piper onnx models typically expect Int64 (long) inputs
+        int[] phonemeTokensInt = tokenizer.Tokenize(phonemeArray);
+        long[] phonemeTokens = phonemeTokensInt.Select(x => (long)x).ToArray();
 
         float[] scales = tokenizer.GetInferenceParams();
-        int[] inputLength = { phonemeTokens.Length };
+        long[] inputLength = { phonemeTokens.Length };
 
         Debug.Log($"Model inputs prepared. Token count: {inputLength[0]}, Scales: [{string.Join(", ", scales)}]");
 
-        using var phonemesTensor = new Tensor<int>(new TensorShape(1, phonemeTokens.Length), phonemeTokens);
-        using var lengthTensor = new Tensor<int>(new TensorShape(1), inputLength);
-        using var scalesTensor = new Tensor<float>(new TensorShape(3), scales);
-
-        engine.SetInput("input", phonemesTensor);
-        engine.SetInput("input_lengths", lengthTensor);
-        engine.SetInput("scales", scalesTensor);
-        if (hasSidKey)
+        try 
         {
-            engine.SetInput("sid", new Tensor<int>(new TensorShape(1), new int[] { 0 }));
-        }     
+            var inputs = new List<NamedOnnxValue>();
 
-        engine.Schedule();
+            // 1. input (phoneme IDs)
+            var inputTensor = new DenseTensor<long>(phonemeTokens, new[] { 1, phonemeTokens.Length });
+            inputs.Add(NamedOnnxValue.CreateFromTensor("input", inputTensor));
 
-        using var outputTensor = (engine.PeekOutput() as Tensor<float>).ReadbackAndClone();
-        float[] audioData = outputTensor.DownloadToArray();
+            // 2. input_lengths
+            var lengthTensor = new DenseTensor<long>(inputLength, new[] { 1 });
+            inputs.Add(NamedOnnxValue.CreateFromTensor("input_lengths", lengthTensor));
 
-        if (audioData == null || audioData.Length == 0)
-        {
-            Debug.LogError("Failed to generate audio data or the data is empty.");
-            return;
+            // 3. scales
+            var scalesTensor = new DenseTensor<float>(scales, new[] { 3 });
+            inputs.Add(NamedOnnxValue.CreateFromTensor("scales", scalesTensor));
+
+            // 4. sid (if needed)
+            if (hasSidKey)
+            {
+                var sidTensor = new DenseTensor<long>(new long[] { speakerId }, new[] { 1 });
+                inputs.Add(NamedOnnxValue.CreateFromTensor("sid", sidTensor)); 
+            }
+
+            using (var results = session.Run(inputs))
+            {
+                // Piper output is usually named "output"
+                // It is a float tensor
+                var outputResult = results.FirstOrDefault(); // or results.First(r => r.Name == "output")
+                if (outputResult == null)
+                {
+                    Debug.LogError("Model returned no results.");
+                    return;
+                }
+
+                var outputTensor = outputResult.AsTensor<float>();
+                float[] audioData = outputTensor.ToArray();
+
+                if (audioData == null || audioData.Length == 0)
+                {
+                    Debug.LogError("Failed to generate audio data or the data is empty.");
+                    return;
+                }
+                Debug.Log($"Generated audio data length: {audioData.Length}");
+
+                int sampleRate = tokenizer.SampleRate;
+                // Unity AudioClip expects data in range [-1, 1]. Piper output is usually raw audio samples.
+                // Assuming the output is already normalized or close to it. (Piper usually outputs raw float samples).
+                
+                AudioClip clip = AudioClip.Create("GeneratedSpeech", audioData.Length, 1, sampleRate, false);
+                clip.SetData(audioData, 0);
+
+                Debug.Log($"Speech generated! AudioClip length: {clip.length:F2}s. Playing.");
+                audioSource.PlayOneShot(clip);
+            }
         }
-        Debug.Log($"Generated audio data length: {audioData.Length}");
-
-        int sampleRate = tokenizer.SampleRate;
-        AudioClip clip = AudioClip.Create("GeneratedSpeech", audioData.Length, 1, sampleRate, false);
-        clip.SetData(audioData, 0);
-
-        Debug.Log($"Speech generated! AudioClip length: {clip.length:F2}s. Playing.");
-        audioSource.PlayOneShot(clip);
+        catch (Exception e)
+        {
+            Debug.LogError($"Inference failed: {e.Message}");
+        }
     }
 
     private void _WarmupModel()
     {
         Debug.Log("Warming up the model with a dummy run...");
-        string warmupText = "hello";
+        string warmupText = "h"; // Keep it very short
 
         string phonemeStr = Phonemize(warmupText);
         if (string.IsNullOrEmpty(phonemeStr))
@@ -290,35 +359,36 @@ public class PiperManager : MonoBehaviour
         }
 
         string[] phonemeArray = phonemeStr.Trim().Select(c => c.ToString()).ToArray();
-        int[] phonemeTokens = tokenizer.Tokenize(phonemeArray);
-
+        int[] phonemeTokensInt = tokenizer.Tokenize(phonemeArray);
+        long[] phonemeTokens = phonemeTokensInt.Select(x => (long)x).ToArray();
+        
         float[] scales = tokenizer.GetInferenceParams();
-        int[] inputLength = { phonemeTokens.Length };
+        long[] inputLength = { phonemeTokens.Length };
 
-        using var phonemesTensor = new Tensor<int>(new TensorShape(1, phonemeTokens.Length), phonemeTokens);
-        using var lengthTensor = new Tensor<int>(new TensorShape(1), inputLength);
-        using var scalesTensor = new Tensor<float>(new TensorShape(3), scales);
-
-        engine.SetInput("input", phonemesTensor);
-        engine.SetInput("input_lengths", lengthTensor);
-        engine.SetInput("scales", scalesTensor);
-        if (hasSidKey)
+        try
         {
-            engine.SetInput("sid", new Tensor<int>(new TensorShape(1), new int[] { 0 }));
+            var inputs = new List<NamedOnnxValue>();
+            inputs.Add(NamedOnnxValue.CreateFromTensor("input", new DenseTensor<long>(phonemeTokens, new[] { 1, phonemeTokens.Length })));
+            inputs.Add(NamedOnnxValue.CreateFromTensor("input_lengths", new DenseTensor<long>(inputLength, new[] { 1 })));
+            inputs.Add(NamedOnnxValue.CreateFromTensor("scales", new DenseTensor<float>(scales, new[] { 3 })));
+            
+            if (hasSidKey)
+            {
+                 inputs.Add(NamedOnnxValue.CreateFromTensor("sid", new DenseTensor<long>(new long[] { 0 }, new[] { 1 })));
+            }
+
+            using (var results = session.Run(inputs))
+            {
+                var outputResult = results.FirstOrDefault();
+                if (outputResult != null)
+                {
+                     Debug.Log("Model warmup successful.");
+                }
+            }
         }
-
-
-        engine.Schedule();
-        
-        using var outputTensor = (engine.PeekOutput() as Tensor<float>).ReadbackAndClone();
-        
-        if (outputTensor.shape[0] > 0)
+        catch (Exception e)
         {
-            Debug.Log($"Model warmup successful. Generated dummy audio data length: {outputTensor.shape[0]}.");
-        }
-        else
-        {
-            Debug.LogError("Model warmup failed: Generated output data is empty.");
+            Debug.LogError($"Warmup failed: {e.Message}");
         }
     }
     

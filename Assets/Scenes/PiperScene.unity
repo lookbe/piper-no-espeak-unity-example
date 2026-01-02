@@ -742,7 +742,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5bd68a7f73b184ad9a8dfb22592a7d44, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  modelAsset: {fileID: 5022602860645237092, guid: 7bb97c9ef259be34a84bab60a8bc40d7, type: 3}
+  modelFileName: en_GB-southern_english_female-low.onnx
   tokenizer: {fileID: 1058211987}
   voiceNameText: {fileID: 1166640658}
   commaDelay: 0.1
