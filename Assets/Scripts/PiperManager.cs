@@ -1,7 +1,5 @@
 using System;
 using System.Linq;
-using System.Text;
-using System.Runtime.InteropServices;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -9,19 +7,26 @@ using System.IO;
 using System.Collections;
 using System.Text.RegularExpressions;
 using UnityEngine.Networking;
-using System.IO.Compression;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
+using OpenPhonemizer; 
 
 [RequireComponent(typeof(AudioSource))]
 public class PiperManager : MonoBehaviour
 {
+    [Header("Piper Model Settings")]
     public string modelFileName = "model.onnx";
-    public ESpeakTokenizer tokenizer;
+    public ESpeakTokenizer tokenizer; // Maps phonemes to IDs for Piper
+
+    [Header("OpenPhonemizer Settings")]
+    public string phonemizerModelName = "phonemizer_model.onnx";
+    public string phonemizerConfigName = "tokenizer.json";
+    public string phonemizerDictName = "phoneme_dict.json";
 
     public Text voiceNameText;
 
     private InferenceSession session;
+    private OpenPhonemizer.Phonemizer g2p; 
     private AudioSource audioSource;
     private bool isInitialized = false;
 
@@ -47,100 +52,61 @@ public class PiperManager : MonoBehaviour
 
     private IEnumerator InitializePiper()
     {
-        string espeakDataPath;
-        string modelPath;
+        string persistentDataPath = Application.persistentDataPath;
+        string streamingAssetsPath = Application.streamingAssetsPath;
+
+        // Paths for Piper Model
+        string piperModelPathId = Path.Combine(persistentDataPath, modelFileName);
+        
+        // Paths for Phonemizer
+        string phModelPath = Path.Combine(persistentDataPath, phonemizerModelName);
+        string phConfigPath = Path.Combine(persistentDataPath, phonemizerConfigName);
+        string phDictPath = Path.Combine(persistentDataPath, phonemizerDictName);
 
         #if UNITY_ANDROID && !UNITY_EDITOR
-            espeakDataPath = Path.Combine(Application.persistentDataPath, "espeak-ng-data");
-            modelPath = Path.Combine(Application.persistentDataPath, modelFileName);
-
-            // 1. Setup eSpeak Data (copy if needed)
-            if (!Directory.Exists(espeakDataPath))
-            {
-                Debug.Log("Android: eSpeak data not found in persistentDataPath. Starting copy process...");
-
-                string zipSourcePath = Path.Combine(Application.streamingAssetsPath, "espeak-ng-data.zip");
-                string zipDestPath = Path.Combine(Application.persistentDataPath, "espeak-ng-data.zip");
-
-                using (UnityWebRequest www = UnityWebRequest.Get(zipSourcePath))
-                {
-                    yield return www.SendWebRequest();
-
-                    if (www.result != UnityWebRequest.Result.Success)
-                    {
-                        Debug.LogError($"Failed to load espeak-ng-data.zip from StreamingAssets: {www.error}");
-                        yield break;
-                    }
-
-                    File.WriteAllBytes(zipDestPath, www.downloadHandler.data);
-
-                    try
-                    {
-                        ZipFile.ExtractToDirectory(zipDestPath, Application.persistentDataPath);
-                        Debug.Log("eSpeak data successfully unzipped to persistentDataPath.");
-                    }
-                    catch (Exception e)
-                    {
-                        Debug.LogError($"Error unzipping eSpeak data: {e.Message}");
-                        yield break;
-                    }
-                    finally
-                    {
-                        if (File.Exists(zipDestPath))
-                        {
-                            File.Delete(zipDestPath);
-                        }
-                    }
-                }
-            }
-            else
-            {
-                Debug.Log("Android: eSpeak data already exists in persistentDataPath.");
-            }
-
-            // 2. Setup Model File (copy if needed)
-            if (!File.Exists(modelPath))
-            {
-                Debug.Log($"Android: Model file '{modelFileName}' not found in persistentDataPath. Copying from StreamingAssets...");
-                string modelSourcePath = Path.Combine(Application.streamingAssetsPath, modelFileName);
-                
-                using (UnityWebRequest www = UnityWebRequest.Get(modelSourcePath))
-                {
-                    yield return www.SendWebRequest();
-                    if (www.result != UnityWebRequest.Result.Success)
-                    {
-                         Debug.LogError($"Failed to load model file '{modelFileName}' from StreamingAssets: {www.error}");
-                         yield break;
-                    }
-                    File.WriteAllBytes(modelPath, www.downloadHandler.data);
-                    Debug.Log($"Model file copied to: {modelPath}");
-                }
-            }
-
+            // Android: Copy all required files from StreamingAssets to persistentDataPath
+            yield return StartCoroutine(CopyFile(modelFileName, piperModelPathId));
+            yield return StartCoroutine(CopyFile(phonemizerModelName, phModelPath));
+            yield return StartCoroutine(CopyFile(phonemizerConfigName, phConfigPath));
+            yield return StartCoroutine(CopyFile(phonemizerDictName, phDictPath));
         #else
-            espeakDataPath = Path.Combine(Application.streamingAssetsPath, "espeak-ng-data");
-            modelPath = Path.Combine(Application.streamingAssetsPath, modelFileName);
-            Debug.Log($"Editor/Standalone: Using eSpeak data directly from StreamingAssets: {espeakDataPath}");
+            // Editor: Use StreamingAssets directly
+            piperModelPathId = Path.Combine(streamingAssetsPath, modelFileName);
+            phModelPath = Path.Combine(streamingAssetsPath, phonemizerModelName);
+            phConfigPath = Path.Combine(streamingAssetsPath, phonemizerConfigName);
+            phDictPath = Path.Combine(streamingAssetsPath, phonemizerDictName);
             yield return null;
         #endif
 
-        InitializeESpeak(espeakDataPath);
+        // 1. Initialize OpenPhonemizer
+        try 
+        {
+            Debug.Log($"Initializing OpenPhonemizer with: {phModelPath}");
+            g2p = new OpenPhonemizer.Phonemizer(phModelPath, phDictPath, phConfigPath);
+            Debug.Log("OpenPhonemizer initialized.");
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"Failed to initialize OpenPhonemizer: {e.Message}");
+            yield break;
+        }
 
+        // 2. Initialize Piper Model
         try
         {
-            Debug.Log($"Creating InferenceSession with model at: {modelPath}");
-            session = new InferenceSession(modelPath);
+            Debug.Log($"Creating InferenceSession for Piper with model at: {piperModelPathId}");
+            session = new InferenceSession(piperModelPathId);
             
             // Auto-detect if "sid" input exists
             if (session.InputMetadata.ContainsKey("sid"))
             {
                 hasSidKey = true;
-                Debug.Log("Model requires speaker ID (sid).");
+                Debug.Log("Piper Model requires speaker ID (sid).");
             }
         }
         catch (Exception e)
         {
-            Debug.LogError($"Failed to perform inference session initialization: {e.Message}");
+            Debug.LogError($"Failed to perform Piper inference session initialization: {e.Message}");
             yield break;
         }
 
@@ -154,31 +120,29 @@ public class PiperManager : MonoBehaviour
         Debug.Log("Finished warmup.");
     }
 
-    private void InitializeESpeak(string dataPath)
+    private IEnumerator CopyFile(string fileName, string destPath)
     {
-        int initResult = ESpeakNG.espeak_Initialize(0, 0, dataPath, 0);
-
-        if (initResult > 0)
+        if (!File.Exists(destPath))
         {
-            Debug.Log($"[PiperManager] eSpeak-ng Initialization SUCCEEDED. Data path: {dataPath}");
-
-            if (tokenizer == null || string.IsNullOrEmpty(tokenizer.Voice))
+            Debug.Log($"Copying {fileName} to {destPath}...");
+            string sourcePath = Path.Combine(Application.streamingAssetsPath, fileName);
+            using (UnityWebRequest www = UnityWebRequest.Get(sourcePath))
             {
-                Debug.LogError("[PiperManager] Tokenizer is not assigned or has no voice name.");
-                return;
+                yield return www.SendWebRequest();
+                if (www.result != UnityWebRequest.Result.Success)
+                {
+                    Debug.LogError($"Failed to copy {fileName}: {www.error}");
+                }
+                else
+                {
+                    File.WriteAllBytes(destPath, www.downloadHandler.data);
+                    Debug.Log($"Successfully copied {fileName}.");
+                }
             }
-
-            string voiceName = tokenizer.Voice;
-            int voiceResult = ESpeakNG.espeak_SetVoiceByName(voiceName);
-
-            if (voiceResult == 0)
-                Debug.Log($"[PiperManager] Set voice to '{voiceName}' SUCCEEDED.");
-            else
-                Debug.LogError($"[PiperManager] Set voice to '{voiceName}' FAILED. Error code: {voiceResult}");
         }
         else
         {
-            Debug.LogError($"[PiperManager] eSpeak-ng Initialization FAILED. Error code: {initResult}");
+            Debug.Log($"File {fileName} already exists at destination.");
         }
     }
 
@@ -186,6 +150,8 @@ public class PiperManager : MonoBehaviour
     {
         session?.Dispose();
         session = null;
+        g2p?.Dispose();
+        g2p = null;
     }
 
     public void OnSubmitText(Text textField)
@@ -275,7 +241,10 @@ public class PiperManager : MonoBehaviour
             return;
         }
 
-        string[] phonemeArray = phonemeStr.Trim().Select(c => c.ToString()).ToArray();
+        // The OpenPhonemizer returns phonemes. We need to split them into individual characters for the tokenizer
+        // e.g. "h@loU" -> ["h", "@", "l", "o", "U"]
+        string[] phonemeArray = phonemeStr.ToCharArray().Select(c => c.ToString()).ToArray();
+        
         // Piper onnx models typically expect Int64 (long) inputs
         int[] phonemeTokensInt = tokenizer.Tokenize(phonemeArray);
         long[] phonemeTokens = phonemeTokensInt.Select(x => (long)x).ToArray();
@@ -311,8 +280,7 @@ public class PiperManager : MonoBehaviour
             using (var results = session.Run(inputs))
             {
                 // Piper output is usually named "output"
-                // It is a float tensor
-                var outputResult = results.FirstOrDefault(); // or results.First(r => r.Name == "output")
+                var outputResult = results.FirstOrDefault(); 
                 if (outputResult == null)
                 {
                     Debug.LogError("Model returned no results.");
@@ -330,8 +298,6 @@ public class PiperManager : MonoBehaviour
                 Debug.Log($"Generated audio data length: {audioData.Length}");
 
                 int sampleRate = tokenizer.SampleRate;
-                // Unity AudioClip expects data in range [-1, 1]. Piper output is usually raw audio samples.
-                // Assuming the output is already normalized or close to it. (Piper usually outputs raw float samples).
                 
                 AudioClip clip = AudioClip.Create("GeneratedSpeech", audioData.Length, 1, sampleRate, false);
                 clip.SetData(audioData, 0);
@@ -349,7 +315,7 @@ public class PiperManager : MonoBehaviour
     private void _WarmupModel()
     {
         Debug.Log("Warming up the model with a dummy run...");
-        string warmupText = "h"; // Keep it very short
+        string warmupText = "h"; 
 
         string phonemeStr = Phonemize(warmupText);
         if (string.IsNullOrEmpty(phonemeStr))
@@ -358,7 +324,7 @@ public class PiperManager : MonoBehaviour
             return;
         }
 
-        string[] phonemeArray = phonemeStr.Trim().Select(c => c.ToString()).ToArray();
+        string[] phonemeArray = phonemeStr.ToCharArray().Select(c => c.ToString()).ToArray();
         int[] phonemeTokensInt = tokenizer.Tokenize(phonemeArray);
         long[] phonemeTokens = phonemeTokensInt.Select(x => (long)x).ToArray();
         
@@ -394,53 +360,23 @@ public class PiperManager : MonoBehaviour
     
     private string Phonemize(string text)
     {
+        if (g2p == null)
+        {
+            Debug.LogError("OpenPhonemizer is not initialized.");
+            return null;
+        }
+
         Debug.Log($"Phonemizing text: \"{text}\"");
-        IntPtr textPtr = IntPtr.Zero;
         try
         {
-            Debug.Log($"[PiperManager] Cleaned text for phonemization: \"{text}\"");
-            byte[] textBytes = Encoding.UTF8.GetBytes(text + "\0");
-            textPtr = Marshal.AllocHGlobal(textBytes.Length);
-            Marshal.Copy(textBytes, 0, textPtr, textBytes.Length);
-            
-            IntPtr pointerToText = textPtr;
-
-            int textMode = 0; // espeakCHARS_AUTO=0
-            int phonemeMode = 2; // bit 1: 0=eSpeak's ascii phoneme names, 1= International Phonetic Alphabet (as UTF-8 characters).
-
-            IntPtr resultPtr = ESpeakNG.espeak_TextToPhonemes(ref pointerToText, textMode, phonemeMode);
-
-            if (resultPtr != IntPtr.Zero)
-            {
-                string phonemeString = PtrToUtf8String(resultPtr);
-                Debug.Log($"[PHONEMES] {phonemeString}");
-                return phonemeString;
-            }
-            else
-            {
-                Debug.LogError("[PiperManager] Phonemize FAILED. The function returned a null pointer.");
-                return null;
-            }
+            string phonemes = g2p.Phonemize(text);
+            Debug.Log($"[PHONEMES] {phonemes}");
+            return phonemes;
         }
-        finally
+        catch (Exception e)
         {
-            if (textPtr != IntPtr.Zero)
-            {
-                Marshal.FreeHGlobal(textPtr);
-            }
+            Debug.LogError($"Phonemization failed: {e.Message}");
+            return null;
         }
-    }
-    
-    private static string PtrToUtf8String(IntPtr ptr)
-    {
-        if (ptr == IntPtr.Zero) return "";
-        var byteList = new List<byte>();
-        for (int offset = 0; ; offset++)
-        {
-            byte b = Marshal.ReadByte(ptr, offset);
-            if (b == 0) break;
-            byteList.Add(b);
-        }
-        return Encoding.UTF8.GetString(byteList.ToArray());
     }
 }
