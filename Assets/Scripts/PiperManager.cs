@@ -19,13 +19,14 @@ using Newtonsoft.Json;
 public class PiperManager : MonoBehaviour
 {
     [Header("Piper Model Settings")]
-    public string modelFileName = "model.onnx";
-    public string piperConfigName = "model.json";
+    public string modelFileName = "Piper/model.onnx";
+    public string piperConfigName = "Piper/model.onnx.json";
 
     [Header("OpenPhonemizer Settings")]
-    public string phonemizerModelName = "phonemizer_model.onnx";
-    public string phonemizerConfigName = "tokenizer.json";
-    public string phonemizerDictName = "phoneme_dict.json";
+    public string phonemizerModelName = "OpenPhonemizer/model.onnx";
+    public string phonemizerModelDataName = "OpenPhonemizer/model.onnx.data";
+    public string phonemizerConfigName = "OpenPhonemizer/tokenizer.json";
+    public string phonemizerDictName = "OpenPhonemizer/phoneme_dict.json";
 
     public Text voiceNameText;
 
@@ -69,21 +70,24 @@ public class PiperManager : MonoBehaviour
         
         // Paths for Phonemizer
         string phModelPath = Path.Combine(persistentDataPath, phonemizerModelName);
+        string phModelDataPath = Path.Combine(persistentDataPath, phonemizerModelDataName);
         string phConfigPath = Path.Combine(persistentDataPath, phonemizerConfigName);
         string phDictPath = Path.Combine(persistentDataPath, phonemizerDictName);
 
-        #if UNITY_ANDROID && !UNITY_EDITOR
+#if UNITY_ANDROID && !UNITY_EDITOR
             // Android: Copy all required files from StreamingAssets to persistentDataPath
             yield return StartCoroutine(CopyFile(modelFileName, piperModelPathId));
             yield return StartCoroutine(CopyFile(piperConfigName, piperConfigPathId));
             yield return StartCoroutine(CopyFile(phonemizerModelName, phModelPath));
+            yield return StartCoroutine(CopyFile(phonemizerModelDataName, phModelDataPath));
             yield return StartCoroutine(CopyFile(phonemizerConfigName, phConfigPath));
             yield return StartCoroutine(CopyFile(phonemizerDictName, phDictPath));
-        #else
-            // Editor: Use StreamingAssets directly
-            piperModelPathId = Path.Combine(streamingAssetsPath, modelFileName);
+#else
+        // Editor: Use StreamingAssets directly
+        piperModelPathId = Path.Combine(streamingAssetsPath, modelFileName);
             piperConfigPathId = Path.Combine(streamingAssetsPath, piperConfigName);
             phModelPath = Path.Combine(streamingAssetsPath, phonemizerModelName);
+            phModelDataPath = Path.Combine(streamingAssetsPath, phonemizerModelDataName);
             phConfigPath = Path.Combine(streamingAssetsPath, phonemizerConfigName);
             phDictPath = Path.Combine(streamingAssetsPath, phonemizerDictName);
             yield return null;
@@ -166,16 +170,31 @@ public class PiperManager : MonoBehaviour
 
     private IEnumerator CopyFile(string fileName, string destPath)
     {
+        // Ensure the directory exists
+        string dir = Path.GetDirectoryName(destPath);
+        if (!Directory.Exists(dir))
+        {
+            Directory.CreateDirectory(dir);
+        }
+
         if (!File.Exists(destPath))
         {
             Debug.Log($"Copying {fileName} to {destPath}...");
             string sourcePath = Path.Combine(Application.streamingAssetsPath, fileName);
+            
+            // On Android, StreamingAssetsPath is a URL (jar:file://...), so Path.Combine might mix separators.
+            // Ensure we use forward slashes for the WebRequest
+            if (Application.platform == RuntimePlatform.Android)
+            {
+                 sourcePath = Path.Combine(Application.streamingAssetsPath, fileName).Replace("\\", "/");
+            }
+
             using (UnityWebRequest www = UnityWebRequest.Get(sourcePath))
             {
                 yield return www.SendWebRequest();
                 if (www.result != UnityWebRequest.Result.Success)
                 {
-                    Debug.LogError($"Failed to copy {fileName}: {www.error}");
+                    Debug.LogError($"Failed to copy {fileName} from {sourcePath}: {www.error}");
                 }
                 else
                 {
