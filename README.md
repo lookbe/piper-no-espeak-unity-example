@@ -54,22 +54,33 @@ By using **ONNX Runtime**, this integration provides a highly optimized C++ back
 ## Getting Started
 
 ### 1. Installation
-1.  **Clone the repository** into your Unity `Assets` folder.
-2.  **Install ONNX Runtime**: Follow the installation guide for [onnxruntime-unity](https://github.com/asus4/onnxruntime-unity).
+1. **Clone the repository** into your Unity `Assets` folder.
+2. **Install ONNX Runtime**: Follow the installation guide for [onnxruntime-unity](https://github.com/asus4/onnxruntime-unity).
 
 ### 2. Required Model Assets
-To run the phonemizer and TTS, you must download the following assets from [lookbe/open-phonemizer-onnx](https://huggingface.co/lookbe/open-phonemizer-onnx/tree/main) and place them in your `Assets/StreamingAssets` folder:
+To run the system, you need two sets of models: the **Phonemizer** (to convert text to phoneme IDs) and the **Piper Voice** (to synthesize audio). Place all files in your `Assets/StreamingAssets` folder.
 
+#### A. Phonemizer Assets
+Download from [lookbe/open-phonemizer-onnx](https://huggingface.co/lookbe/open-phonemizer-onnx/tree/main):
 * `model.onnx`
 * `tokenizer.json`
 * `phoneme_dict.json`
 
-*Note: Also ensure you have an English Piper voice model (`.onnx` and `.json`) in the same directory.*
+#### B. Piper Voice Assets
+Choose a voice from the official [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices/tree/main):
+1. Select your language and voice (e.g., `en/en_US/amy/low/`).
+2. Download **both** the `.onnx` file and the `.onnx.json` file.
 
-### 3. Run the Demo
-1.  Open the scene located at `Assets/Scenes/PiperScene.unity`.
-2.  Press **Play**.
-3.  Enter text in the UI and click **Speak** to trigger local synthesis.
+### 3. Setup PiperManager
+1. In your Unity Scene, select the GameObject with the **PiperManager** component.
+2. In the Inspector, locate the **Asset Path** field.
+3. Set the paths to point to your downloaded assets within the `StreamingAssets` folder.
+4. Ensure the filenames match your downloaded files exactly.
+
+### 4. Run the Demo
+1. Open the scene located at `Assets/Scenes/PiperScene.unity`.
+2. Press **Play**.
+3. Enter text in the UI and click **Submit** to trigger local synthesis.
 
 ---
 
@@ -92,6 +103,7 @@ To run the phonemizer and TTS, you must download the following assets from [look
 ## Links
 * [Open Phonemizer ONNX Models (Hugging Face)](https://huggingface.co/lookbe/open-phonemizer-onnx)
 * [Piper Official](https://github.com/rhasspy/piper)
+* [Piper Voices (Hugging Face)](https://huggingface.co/rhasspy/piper-voices)
 * [onnxruntime-unity Repository](https://github.com/asus4/onnxruntime-unity)
 
 ## License
