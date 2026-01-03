@@ -24,7 +24,6 @@ public class PiperManager : MonoBehaviour
 
     [Header("OpenPhonemizer Settings")]
     public string phonemizerModelName = "OpenPhonemizer/model.onnx";
-    public string phonemizerModelDataName = "OpenPhonemizer/model.onnx.data";
     public string phonemizerConfigName = "OpenPhonemizer/tokenizer.json";
     public string phonemizerDictName = "OpenPhonemizer/phoneme_dict.json";
 
@@ -70,7 +69,6 @@ public class PiperManager : MonoBehaviour
         
         // Paths for Phonemizer
         string phModelPath = Path.Combine(persistentDataPath, phonemizerModelName);
-        string phModelDataPath = Path.Combine(persistentDataPath, phonemizerModelDataName);
         string phConfigPath = Path.Combine(persistentDataPath, phonemizerConfigName);
         string phDictPath = Path.Combine(persistentDataPath, phonemizerDictName);
 
@@ -79,7 +77,6 @@ public class PiperManager : MonoBehaviour
             yield return StartCoroutine(CopyFile(modelFileName, piperModelPathId));
             yield return StartCoroutine(CopyFile(piperConfigName, piperConfigPathId));
             yield return StartCoroutine(CopyFile(phonemizerModelName, phModelPath));
-            yield return StartCoroutine(CopyFile(phonemizerModelDataName, phModelDataPath));
             yield return StartCoroutine(CopyFile(phonemizerConfigName, phConfigPath));
             yield return StartCoroutine(CopyFile(phonemizerDictName, phDictPath));
 #else
@@ -87,7 +84,6 @@ public class PiperManager : MonoBehaviour
         piperModelPathId = Path.Combine(streamingAssetsPath, modelFileName);
             piperConfigPathId = Path.Combine(streamingAssetsPath, piperConfigName);
             phModelPath = Path.Combine(streamingAssetsPath, phonemizerModelName);
-            phModelDataPath = Path.Combine(streamingAssetsPath, phonemizerModelDataName);
             phConfigPath = Path.Combine(streamingAssetsPath, phonemizerConfigName);
             phDictPath = Path.Combine(streamingAssetsPath, phonemizerDictName);
             yield return null;
