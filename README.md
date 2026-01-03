@@ -1,98 +1,98 @@
 # piper-unity
 
-A Fast, Local Neural Text-to-Speech System: Piper in Unity for Multi-Platform
+A Fast, Local Neural Text-to-Speech System: Piper in Unity for Multi-Platform.
 
 ## Overview
 
-Piper is a lightweight, on-device text-to-speech system designed for real-time performance, which is one of the [Open Home Foundation Projects](https://www.openhomefoundation.org/projects/). The neural models are optimized for fast inference while maintaining high-quality speech synthesis. By using pre-trained voices, you can easily switch between different voice nationalities through [Piper Voices](https://rhasspy.github.io/piper-samples/).
+**piper-unity** is a high-performance, on-device text-to-speech (TTS) integration for Unity. This version is a specialized fork/port of the [Piper](https://github.com/rhasspy/piper) project, optimized for real-time applications and game development.
 
-This repository provides Unity integration for Piper, enabling cross-platform text-to-speech capabilities with real-time performance on Windows, macOS, and Android mobile devices.
+### ⚖️ Why this version?
+Unlike the original Piper implementation which relies on `espeak-ng` (GPL Licensed), this repository has been rewritten to be **commercial-friendly** and **performant**:
+- **Permissive Licensing**: Removed all GPL-licensed components. 
+- **Open Phonemizer**: Replaced `espeak-ng` with a permissive-license phonemizer backend.
+- **ONNX Runtime**: Replaced Unity Sentis with [onnxruntime-unity](https://github.com/asus4/onnxruntime-unity) for faster inference speeds and superior platform stability.
+
+---
 
 ## Features
 
-- ✅ Multi-platform support: Windows, macOS, and Android
-- ✅ 100+ languages and accents: Powered by espeak-ng phoneme generation
-- ✅ On-device processing: No internet connection required
-- ✅ Lightweight models: Compact voice models (20~60MB) for efficient deployment
-- ✅ Pre-built libraries: Ready-to-use binaries included
-- ✅ Extensive voice collection: Access to various pre-trained voice models
+* ✅ **Permissive Stack**: No GPL dependencies—suitable for commercial Unity projects.
+* ✅ **High Performance**: Real-time synthesis powered by ONNX Runtime.
+* ✅ **Multi-platform**: Native support for Windows, macOS, and Android.
+* ✅ **Fully Offline**: All processing happens on-device; no internet connection required.
+* ✅ **Lightweight**: Optimized neural models perfect for mobile deployment.
+
+---
+
+## Language Support
+
+> [!IMPORTANT]  
+> **Current Version Support:** The current implementation of the Open Phonemizer backend supports **English only**. 
+> 
+> While the Piper neural engine is capable of many languages, the phoneme conversion layer in this repository is currently optimized for English (`en-us` / `en-gb`). Support for additional languages is planned for future updates as more permissive phoneme dictionaries are integrated.
+
+---
 
 ## Requirements
 
-- **Unity**: `6000.0.50f1`
-- **Inference Engine**: `2.2.1`
-- **espeak-ng**: `1.5.2`
+* **Unity**: `6000.0.58f2` (Unity 6) or higher.
+* **Inference Engine**: [onnxruntime-unity](https://github.com/asus4/onnxruntime-unity) (v2.2.1+).
+* **Phonemizer Resources**: Open Phonemizer ONNX weights and dictionaries.
+
+---
 
 ## Architecture
 
-### 1. Phoneme Generation (espeak-ng)
+### 1. Open Phonemizer
+The text-to-phoneme conversion is handled by a permissive-license implementation. By utilizing a dedicated ONNX-based tokenizer and phoneme dictionary, we eliminate the legal complexities of `espeak-ng` while maintaining high accuracy for Piper's neural models.
 
-This repository includes a Unity port of [espeak-ng](https://github.com/espeak-ng/espeak-ng) for multilingual phoneme generation. The library supports more than 100 languages and accents.
+### 2. ONNX Runtime Inference
+By using **ONNX Runtime**, this integration provides a highly optimized C++ backend for each platform, ensuring that voice synthesis does not bottleneck the Unity main thread.
 
-**Pre-built libraries included:**
-- Windows: `.dll`
-- macOS: `.dylib` 
-- Android: `.so`
-
-### 2. Pre-trained Voice Models
-
-The system uses pre-trained neural voice models that can be easily downloaded and integrated into your Unity project.
+---
 
 ## Getting Started
 
-### 1. Project Setup
+### 1. Installation
+1.  **Clone the repository** into your Unity `Assets` folder.
+2.  **Install ONNX Runtime**: Follow the installation guide for [onnxruntime-unity](https://github.com/asus4/onnxruntime-unity).
 
-- Clone or download this repository
-- Unzip the provided [StreamingAssets.zip](https://drive.google.com/file/d/1Wir241YUVQgDu11T9rwMWgsrL614GhVt/view?usp=sharing) file and place its contents into the `/Assets/StreamingAssets` directory in your project
+### 2. Required Model Assets
+To run the phonemizer and TTS, you must download the following assets from [lookbe/open-phonemizer-onnx](https://huggingface.co/lookbe/open-phonemizer-onnx/tree/main) and place them in your `Assets/StreamingAssets` folder:
 
-### 2. Run the Demo Scene
+* `model.onnx`
+* `tokenizer.json`
+* `phoneme_dict.json`
 
-- Open the `/Assets/Scenes/PiperScene.unity` scene in the Unity Editor
-- Run the scene to see the piper tts tests in action
+*Note: Also ensure you have an English Piper voice model (`.onnx` and `.json`) in the same directory.*
 
-### 3. Voice Models
+### 3. Run the Demo
+1.  Open the scene located at `Assets/Scenes/PiperScene.unity`.
+2.  Press **Play**.
+3.  Enter text in the UI and click **Speak** to trigger local synthesis.
 
-To find and download additional pre-trained voices:
-
-1. Browse available voices: [Piper Voice Samples](https://rhasspy.github.io/piper-samples/)
-2. Check the complete voice list: [VOICES.md](https://github.com/rhasspy/piper/blob/master/VOICES.md)
-3. Import the `.onnx` and `.json` files into your Unity project's Assets folder
-(A few voice models are not compatible with the current version of the Inference Engine and cannot be imported.)
-
-### 4. Custom Voice Training
-
-Want to train your own voice model? Follow the official training guide:
-[TRAINING.md](https://github.com/rhasspy/piper/blob/master/TRAINING.md)
+---
 
 ## Platform Support
 
-| Platform | Status | Library Format |
-|----------|--------|----------------|
-| Windows  | ✅     | `.dll`         |
-| macOS    | ✅     | `.dylib`       |
-| Android  | ✅     | `.so`          |
+| Platform | Status | Runtime Backend | License |
+| :--- | :--- | :--- | :--- |
+| **Windows** | ✅ | ONNX (DirectML/CPU) | Permissive |
+| **macOS** | ✅ | ONNX (CoreML/CPU) | Permissive |
+| **Android** | ✅ | ONNX (NNAPI/CPU) | Permissive |
 
-* If not executable on Windows, install [espeak-ng.msi](https://github.com/espeak-ng/espeak-ng/releases/tag/1.52.0) manually.
+---
 
-## Installation
-
-1. Follow the Project Setup steps in the [Getting Started](#-getting-started) section
-2. Import the appropriate platform libraries
-3. Configure the TTS system in your Unity scenes
-
-## Demo
-
-Experience piper-unity in action! Check out our demo showcasing:
+## Demo Video
 
 [![Piper Unity](https://img.youtube.com/vi/i2LvqWICb40/0.jpg)](https://www.youtube.com/watch?v=i2LvqWICb40)
 
-## Links
+---
 
-- [Piper Official Repository](https://github.com/rhasspy/piper)
-- [Piper Voice Samples](https://rhasspy.github.io/piper-samples/)
-- [espeak-ng](https://github.com/espeak-ng/espeak-ng)
-- [Open Home Foundation](https://www.openhomefoundation.org/projects/)
+## Links
+* [Open Phonemizer ONNX Models (Hugging Face)](https://huggingface.co/lookbe/open-phonemizer-onnx)
+* [Piper Official](https://github.com/rhasspy/piper)
+* [onnxruntime-unity Repository](https://github.com/asus4/onnxruntime-unity)
 
 ## License
-
-This project follows the licensing terms of its underlying components. Please refer to the original Piper and espeak-ng repositories for detailed license information.
+The integration code and phonemizer logic are provided under permissive licenses (MIT/Apache 2.0). Individual voice models and phonemizer weights are subject to the licenses provided on their respective repositories.
