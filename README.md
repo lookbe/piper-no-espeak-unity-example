@@ -35,7 +35,7 @@ Unlike the original Piper implementation which relies on `espeak-ng` (GPL Licens
 
 ## Requirements
 
-* **Unity**: `6000.0.50f1` (Unity 6) or higher.
+* **Unity**: `6000.0.58f2` (Unity 6) or higher.
 * **Inference Engine**: [onnxruntime-unity](https://github.com/asus4/onnxruntime-unity) (v2.2.1+).
 * **Phonemizer Resources**: Open Phonemizer ONNX weights and dictionaries.
 
@@ -61,7 +61,6 @@ By using **ONNX Runtime**, this integration provides a highly optimized C++ back
 To run the phonemizer and TTS, you must download the following assets from [lookbe/open-phonemizer-onnx](https://huggingface.co/lookbe/open-phonemizer-onnx/tree/main) and place them in your `Assets/StreamingAssets` folder:
 
 * `model.onnx`
-* `model.onnx.data`
 * `tokenizer.json`
 * `phoneme_dict.json`
 
