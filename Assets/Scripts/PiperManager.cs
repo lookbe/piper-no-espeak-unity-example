@@ -220,7 +220,7 @@ public class PiperManager : MonoBehaviour
         g2p = null;
     }
 
-    public void OnSubmitText(Text textField)
+    public void OnSubmitText(InputField textField)
     {
         if (string.IsNullOrEmpty(textField.text))
         {
