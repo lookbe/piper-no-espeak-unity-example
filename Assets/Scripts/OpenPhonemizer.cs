@@ -10,15 +10,6 @@ using UnityEngine;
 
 namespace OpenPhonemizer
 {
-    // Stub for Humanizer if not present
-    public static class NumberExtensions
-    {
-        public static string ToWords(this int number)
-        {
-            // Simple fallback if Humanizer is missing
-            return number.ToString(); 
-        }
-    }
 
     // config classes
     public class TokenizerConfig
@@ -157,25 +148,10 @@ namespace OpenPhonemizer
             }
         }
 
-        private string PreProcessNumbers(string text)
-        {
-             // Regex to find numbers
-             return Regex.Replace(text, @"\d+", match => 
-             {
-                 if (int.TryParse(match.Value, out int number))
-                 {
-                     return number.ToWords(); // Uses extension method above (or Humanizer if available/imported)
-                 }
-                 return match.Value;
-             });
-        }
 
         public string Phonemize(string text, string lang = "en_us")
         {
             if (string.IsNullOrEmpty(text)) return "";
-
-            // Preprocess numbers
-            text = PreProcessNumbers(text);
 
             // Simple split by punctuation
             string pattern = @"([().,:?!/–\s])"; // Punctuation + whitespace

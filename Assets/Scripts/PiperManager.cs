@@ -15,6 +15,13 @@ using Microsoft.ML.OnnxRuntime.Tensors;
 using OpenPhonemizer; 
 using Newtonsoft.Json;
 
+public static class NumberExtensions
+{
+    public static string ToWords(this int number) => NumberToText.Convert(number);
+    public static string ToWords(this long number) => NumberToText.Convert(number);
+    public static string ToWords(this double number) => NumberToText.Convert(number);
+}
+
 [RequireComponent(typeof(AudioSource))]
 public class PiperManager : MonoBehaviour
 {
@@ -232,7 +239,24 @@ public class PiperManager : MonoBehaviour
             Debug.LogError("Piper Manager is not initialized.");
             return;
         }
+
+        // 1. Convert numbers to text before any other processing
+        text = PreProcessNumbers(text);
+
         StartCoroutine(SynthesizeAndPlayCoroutine(text));
+    }
+
+    private string PreProcessNumbers(string text)
+    {
+        // Regex to find numbers (including decimals)
+        return Regex.Replace(text, @"\d+(\.\d+)?", match => 
+        {
+            if (double.TryParse(match.Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double number))
+            {
+                return number.ToWords();
+            }
+            return match.Value;
+        });
     }
 
     private IEnumerator SynthesizeAndPlayCoroutine(string text)
