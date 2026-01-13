@@ -1,0 +1,84 @@
+using PiperTTS;
+using TMPro;
+using UnityEngine;
+using UnityEngine.UI;
+
+public class BasicPiper : MonoBehaviour
+{
+    public PiperTTS.PiperTTS tts;
+
+    public TMP_Text chatHistory;
+    public TMP_InputField chatInputField;
+    public Button sendButton;
+
+    void Start()
+    {
+        //tts.InitModel();
+        sendButton.onClick.AddListener(OnSendButtonClicked);
+    }
+
+    private void OnEnable()
+    {
+        if (tts != null)
+        {
+            tts.OnStatusChanged += OnBotStatusChanged;
+
+            OnBotStatusChanged(tts.status);
+        }
+    }
+
+    private void OnDisable()
+    {
+        if (tts != null)
+        {
+            tts.OnStatusChanged -= OnBotStatusChanged;
+        }
+    }
+
+    void OnBotStatusChanged(ModelStatus status)
+    {
+        switch (status)
+        {
+            case ModelStatus.Loading:
+                {
+                    sendButton.interactable = false;
+                }
+                break;
+            case ModelStatus.Ready:
+                {
+                    sendButton.interactable = true;
+                }
+                break;
+            case ModelStatus.Generate:
+                {
+                    sendButton.interactable = false;
+                    ClearInput();
+                }
+                break;
+            case ModelStatus.Error:
+                {
+                    sendButton.interactable = true;
+                }
+                break;
+        }
+    }
+
+    protected virtual void ClearInput()
+    {
+        chatInputField.text = "";
+    }
+
+    public void OnSendButtonClicked()
+    {
+        if (tts)
+        {
+            string message = chatInputField.text;
+            if (!string.IsNullOrEmpty(message))
+            {
+                chatHistory.text += "tts: " + message + "\n";
+                tts.Prompt(message);
+                ClearInput();
+            }
+        }
+    }
+}

@@ -11,6 +11,9 @@
   "dependencies": {
     "com.github.asus4.onnxruntime": "0.4.2",
     "com.github.asus4.onnxruntime.unity": "0.4.2",
+    "ai.lookbe.piper": "https://github.com/lookbe/piper-no-espeak-unity.git",
+    "ai.lookbe.obbmount": "https://github.com/lookbe/obb-mount-unity.git",
+	"com.mopsicus.umi": "https://github.com/mopsicus/umi.git",
     "com.unity.ai.navigation": "2.0.9",
     "com.unity.collab-proxy": "2.9.3",
     "com.unity.ide.rider": "3.0.37",
