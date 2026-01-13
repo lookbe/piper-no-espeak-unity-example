@@ -1,6 +1,5 @@
 using System.Collections;
 using UMI;
-using Unity.VisualScripting;
 using UnityEngine;
 
 public class BasicMobileInput : BasicPiper
@@ -26,7 +25,7 @@ public class BasicMobileInput : BasicPiper
         MobileInput.OnKeyboardAction += OnKeyboardAction;
 
         // copy initial input to native input
-        multiInput = chatInputField.AddComponent<MobileInputField>();
+        multiInput = chatInputField.gameObject.AddComponent<MobileInputField>();
         multiInput.IsManualHideControl = true;
         multiInput.Text = chatInputField.text;
     }
