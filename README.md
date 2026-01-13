@@ -36,8 +36,6 @@ Unlike the original Piper implementation which relies on `espeak-ng` (GPL Licens
 ## Requirements
 
 * **Unity**: `6000.0.58f2` (Unity 6) or higher.
-* **Inference Engine**: [onnxruntime-unity](https://github.com/asus4/onnxruntime-unity) (v2.2.1+).
-* **Phonemizer Resources**: Open Phonemizer ONNX weights and dictionaries.
 
 ---
 
@@ -54,8 +52,7 @@ By using **ONNX Runtime**, this integration provides a highly optimized C++ back
 ## Getting Started
 
 ### 1. Installation
-1. **Clone the repository** into your Unity `Assets` folder.
-2. **Install ONNX Runtime**: Follow the installation guide for [onnxruntime-unity](https://github.com/asus4/onnxruntime-unity).
+**Clone the repository** into your Unity project folder.
 
 ### 2. Required Model Assets
 To run the system, you need two sets of models: the **Phonemizer** (to convert text to phoneme IDs) and the **Piper Voice** (to synthesize audio). Place all files in your `Assets/StreamingAssets` folder.
@@ -71,16 +68,16 @@ Choose a voice from the official [rhasspy/piper-voices](https://huggingface.co/r
 1. Select your language and voice (e.g., `en/en_US/amy/low/`).
 2. Download **both** the `.onnx` file and the `.onnx.json` file.
 
-### 3. Setup PiperManager
-1. In your Unity Scene, select the GameObject with the **PiperManager** component.
-2. In the Inspector, locate the **Asset Path** field.
+### 3. Setup PiperTTS
+1. In your Unity Scene, select the GameObject with the **PiperTTS** component.
+2. In the Inspector, locate the **Piper Model Path**, **Piper Config Path**, **Phonemizer Model Path**, **Phonemizer Config Path**, **Phonemizer Dict Path** field.
 3. Set the paths to point to your downloaded assets within the `StreamingAssets` folder.
 4. Ensure the filenames match your downloaded files exactly.
 
 ### 4. Run the Demo
-1. Open the scene located at `Assets/Scenes/PiperScene.unity`.
+1. Open the scene located at `Assets/Scenes/BasicPiper.unity`.
 2. Press **Play**.
-3. Enter text in the UI and click **Submit** to trigger local synthesis.
+3. Enter text in the UI and click **Send** to trigger local synthesis.
 
 ---
 
