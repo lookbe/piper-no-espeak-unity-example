@@ -11,13 +11,18 @@ public class InitModel : MonoBehaviour
     {
         yield return new WaitUntil(() => !string.IsNullOrEmpty(AndroidObbMount.AndroidObbMount.mountPoint));
 
-        tts.piperModelPath = Path.IsPathRooted(tts.piperModelPath) ? tts.piperModelPath : Path.Join(AndroidObbMount.AndroidObbMount.mountPoint, tts.piperModelPath);
-        tts.piperConfigPath = Path.IsPathRooted(tts.piperConfigPath) ? tts.piperConfigPath : Path.Join(AndroidObbMount.AndroidObbMount.mountPoint, tts.piperConfigPath);
+        tts.piperModelPath = GetAbsolutePath(tts.piperModelPath);
+        tts.piperConfigPath = GetAbsolutePath(tts.piperConfigPath);
 
-        tts.phonemizerModelPath = Path.IsPathRooted(tts.phonemizerModelPath) ? tts.phonemizerModelPath : Path.Join(AndroidObbMount.AndroidObbMount.mountPoint, tts.phonemizerModelPath);
-        tts.phonemizerConfigPath = Path.IsPathRooted(tts.phonemizerConfigPath) ? tts.piperModelPath : Path.Join(AndroidObbMount.AndroidObbMount.mountPoint, tts.phonemizerConfigPath);
-        tts.phonemizerDictPath = Path.IsPathRooted(tts.phonemizerDictPath) ? tts.piperModelPath : Path.Join(AndroidObbMount.AndroidObbMount.mountPoint, tts.phonemizerDictPath);
+        tts.phonemizerModelPath = GetAbsolutePath(tts.phonemizerModelPath);
+        tts.phonemizerConfigPath = GetAbsolutePath(tts.phonemizerConfigPath);
+        tts.phonemizerDictPath = GetAbsolutePath(tts.phonemizerDictPath);
 
         tts.InitModel();
+    }
+
+    string GetAbsolutePath(string filepath)
+    {
+        return Path.IsPathRooted(filepath) ? filepath : Path.Join(AndroidObbMount.AndroidObbMount.mountPoint, filepath);
     }
 }
